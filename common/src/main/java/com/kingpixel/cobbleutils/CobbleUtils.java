@@ -25,6 +25,7 @@ import com.kingpixel.cobbleutils.util.redis.RedisManager;
 import com.kingpixel.cobbleutils.util.redis.RedisService;
 import com.kingpixel.cobbleutils.util.redis.handlers.RedisMessageHandler;
 import com.kingpixel.cobbleutils.util.redis.handlers.RedisTeleportHandler;
+import com.kingpixel.cobbleutils.util.redis.handlers.RedisCrossServerCacheHandler;
 import com.kingpixel.cobbleutils.util.redis.handlers.RedisUserCacheHandler;
 import com.kingpixel.cobbleutils.util.sql.SQLService;
 import dev.architectury.event.events.common.CommandRegistrationEvent;
@@ -185,6 +186,7 @@ public class CobbleUtils {
         redisManager.registerHandler(new RedisMessageHandler());
         redisManager.registerHandler(new RedisTeleportHandler());
         redisManager.registerHandler(new RedisUserCacheHandler());
+        redisManager.registerHandler(new RedisCrossServerCacheHandler());
       }
     } catch (NoClassDefFoundError | NoSuchMethodError | Exception e) {
       LOGGER_RAW.error("Error while trying to initialize RedisManager: " + e.getMessage());
@@ -241,7 +243,7 @@ public class CobbleUtils {
 
     PlayerEvent.PLAYER_JOIN.register((player) -> runAsync(() -> {
       try {
-        UserModel user = DataBaseFactory.users().findUserByUUID(player.getUuid());
+        UserModel user = DataBaseFactory.users().findUserFresh(player.getUuid());
         if (user == null) {
           user = new UserModel(player);
         }

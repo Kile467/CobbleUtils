@@ -43,6 +43,7 @@ import java.util.UUID;
 public class DataBaseUsersSQL extends DataBaseUsers {
 
   private SQLManager sqlManager;
+  private DataBaseConfig config;
   private DataBaseType type;
 
   /**
@@ -52,16 +53,23 @@ public class DataBaseUsersSQL extends DataBaseUsers {
    */
   @Override
   public void connect(DataBaseConfig config) {
+    this.config = config;
     this.type = config.getType();
     this.sqlManager = SQLService.getOrCreateManager(config);
     createTables();
   }
 
   /**
-   * Close the SQL database connection.
+   * Releases the shared SQL pool reference for this configuration.
    */
   @Override
   public void disconnect() {
+    if (config != null) {
+      SQLService.releaseManager(config);
+    }
+    sqlManager = null;
+    config = null;
+    type = null;
   }
 
   /**

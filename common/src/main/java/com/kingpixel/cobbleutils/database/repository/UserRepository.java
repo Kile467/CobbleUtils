@@ -53,6 +53,13 @@ public interface UserRepository {
   UserModel findUserByUUID(@NotNull UUID uuid);
 
   /**
+   * Evicts the local cache entry and reloads from the backing store.
+   * Use on player join / cross-server transfer so RAM does not serve stale data.
+   */
+  @Nullable
+  UserModel findUserFresh(@NotNull UUID uuid);
+
+  /**
    * Looks up the user by Minecraft display name. Resolves via the server UserCache first.
    */
   @Nullable

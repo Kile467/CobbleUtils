@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Central service that manages shared {@link SQLManager} instances.
@@ -52,6 +53,7 @@ public class SQLService {
    * Ensures a single HikariCP pool per unique database endpoint.
    */
   private static final Map<String, SQLManager> MANAGERS = new ConcurrentHashMap<>();
+  private static final Map<String, AtomicInteger> REF_COUNTS = new ConcurrentHashMap<>();
 
   /**
    * Retrieves an existing {@link SQLManager} for the given database endpoint,
@@ -67,6 +69,7 @@ public class SQLService {
   public static SQLManager getOrCreateManager(DataBaseConfig config) {
     Objects.requireNonNull(config, "DataBaseConfig cannot be null");
     String connectionKey = SQLManager.buildConnectionKey(config);
+    REF_COUNTS.computeIfAbsent(connectionKey, k -> new AtomicInteger(0)).incrementAndGet();
 
     return MANAGERS.compute(connectionKey, (key, existing) -> {
       if (existing != null && existing.isAlive()) {
@@ -94,6 +97,28 @@ public class SQLService {
   }
 
   /**
+   * Releases one reference to the shared pool for this database endpoint.
+   * The pool is closed when no mod holds a reference. Server shutdown should use {@link #shutdown()}.
+   */
+  public static void releaseManager(DataBaseConfig config) {
+    Objects.requireNonNull(config, "DataBaseConfig cannot be null");
+    String connectionKey = SQLManager.buildConnectionKey(config);
+    AtomicInteger refs = REF_COUNTS.get(connectionKey);
+    if (refs == null) {
+      return;
+    }
+    if (refs.decrementAndGet() > 0) {
+      return;
+    }
+    REF_COUNTS.remove(connectionKey);
+    SQLManager manager = MANAGERS.remove(connectionKey);
+    if (manager != null) {
+      CobbleUtils.LOGGER_RAW.info("Closing SQL connection pool for {}", config.getType());
+      closeQuietly(manager);
+    }
+  }
+
+  /**
    * Gracefully closes all active SQL connection pools and clears the manager pool.
    * <p>
    * This should be called once during server shutdown to ensure all
@@ -107,6 +132,7 @@ public class SQLService {
     }
     MANAGERS.values().forEach(SQLManager::close);
     MANAGERS.clear();
+    REF_COUNTS.clear();
     CobbleUtils.LOGGER_RAW.info("All SQL connection pools shut down successfully.");
   }
 

@@ -89,6 +89,19 @@ public abstract class DataBaseUsers implements UserRepository {
     return user;
   }
 
+  /**
+   * Drops the local cache entry and loads from persistent storage (join / cross-server transfer).
+   */
+  @Nullable
+  public UserModel findUserFresh(@NotNull UUID uuid) {
+    USERS.invalidate(uuid);
+    UserModel user = findUserByUUID(uuid);
+    if (user != null) {
+      USERS.put(uuid, user);
+    }
+    return user;
+  }
+
   @Nullable
   public abstract UserModel findUserByUUID(@NotNull UUID uuid);
 
