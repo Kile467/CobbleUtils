@@ -1,0 +1,111 @@
+name: Build, Discord & Modrinth Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+  MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  JAVA_VERSION: 21
+  JAVA_DISTRIBUTION: temurin
+
+jobs:
+  full-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set project info
+        id: set-info
+        run: |
+          TAG="${{ github.ref_name }}"
+          MOD_NAME=$(grep '^mod_name=' gradle.properties | cut -d'=' -f2)
+          MOD_VERSION=$(grep '^mod_version=' gradle.properties | cut -d'=' -f2)
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "MOD_NAME=$MOD_NAME" >> $GITHUB_ENV
+          echo "MOD_VERSION=$MOD_VERSION" >> $GITHUB_ENV
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+
+      - run: chmod +x ./gradlew
+
+      - name: Build mod
+        run: |
+          sed -i 's/^org.gradle.java.home=/#&/' gradle.properties
+          ./gradlew build apiJar --no-daemon
+
+      - name: Create GitHub Release
+        run: |
+          # Recoger todos los jars construidos sin duplicar los de common
+          JARS=$(ls fabric/build/libs/*.jar neoforge/build/libs/*.jar actual_versions/*.jar 2>/dev/null | grep -v "sources" | grep -v "dev-shadow" | grep -v "\-dev\.jar" || true)
+          echo "Jars a subir: $JARS"
+          gh release create "$TAG" $JARS \
+            --title "Release $TAG" \
+            --notes "Automated release for version $TAG"
+
+      - name: Send Discord Notification with Embed and File
+        run: |
+          # Buscar el jar principal de Fabric
+          FILE=$(ls fabric/build/libs/*.jar 2>/dev/null | grep -v "sources" | grep -v "dev-shadow" | grep -v "\-dev\.jar" | head -n1 || true)
+          
+          # Extraer changelog
+          BASE=$(echo "$TAG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          CHANGELOG_CONTENT=$(tr -d '\r' < CHANGELOG.md | awk -v ver="$BASE" '
+            $0 ~ "## \\[" ver "\\]" {flag=1; next}
+            /^## \[/ && flag {flag=0}
+            flag {print}
+          ')
+          
+          # Generar JSON embed correctamente escapado
+          JSON_PAYLOAD=$(jq -nc --arg tag "$TAG" --arg changelog "$CHANGELOG_CONTENT" \
+            '{content: "@everyone 🎉 New Release!", embeds:[{title:("Release "+$tag), description:$changelog, color:3066993}]}')
+          
+          echo "Embed JSON:"
+          echo "$JSON_PAYLOAD"
+          
+          # 1️⃣ Enviar primero el embed
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD"
+          
+          # 2️⃣ Enviar después el archivo como segundo mensaje
+          if [ -n "$FILE" ] && [ -f "$FILE" ]; then
+            curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+              -F "file=@${FILE}"
+          fi
+
+      - name: Publish to Modrinth
+        run: |
+          FILE=$(ls fabric/build/libs/*.jar 2>/dev/null | grep -v "sources" | grep -v "dev-shadow" | grep -v "\-dev\.jar" | head -n1 || true)
+
+          if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+            echo "No se encontró ningún Jar para subir a Modrinth."
+            exit 0
+          fi
+
+          # Verificar si la versión ya existe
+          EXISTS=$(curl -s "https://api.modrinth.com/v2/project/$MOD_NAME/version" | \
+            jq -r ".[] | select(.version_number==\"$MOD_VERSION\") | .version_number" 2>/dev/null || true)
+
+          if [ -n "$EXISTS" ]; then
+            echo "La versión $MOD_VERSION ya existe en Modrinth, omitiendo publicación."
+            exit 0
+          fi
+
+          ./gradlew modrinth -PuploadFile="$FILE" -PmodrinthVersion="$MOD_VERSION"

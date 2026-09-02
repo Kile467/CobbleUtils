@@ -21,12 +21,12 @@ import java.util.Map;
 @Data
 @ToString
 public class Config {
+  private String server = "default";
   private boolean debug;
   private boolean adminServer = true;
   private boolean useDefault;
   private String lang;
   private String prefix;
-  private String server;
   private List<String> commmandplugin;
   private List<String> storageCommand;
   private int decimals;
@@ -50,6 +50,7 @@ public class Config {
 
 
   public Config() {
+    server = "default";
     debug = false;
     useDefault = false;
     prefix = "§7[§6CobbleUtils§7] ";
@@ -57,7 +58,6 @@ public class Config {
     timeSinceLastLoginToSuggest = DurationValue.parse("1y");
     decimals = 2;
     priceFormat = "#,##0.00";
-    server = "ExampleServer";
     GtsSupport = false;
     GtsEconomyToUse = new EconomyUse(ImpactorEconomy.IDENTIFY, "");
     priorityEconomy = new ArrayList<>();

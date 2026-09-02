@@ -1,22 +1,19 @@
 plugins {
     id "architectury-plugin" version "3.4-SNAPSHOT"
     id "dev.architectury.loom" version "1.9-SNAPSHOT" apply false
-    id 'com.palantir.git-version' version '3.0.0'
     id 'maven-publish'
 }
 
-def git = versionDetails()
-def tag = git.lastTag.substring(0)
 if (System.getenv("GITHUB_ACTIONS") == "true") {
-    if (System.getenv("GITHUB_WORKFLOW") == "Release") {
-        version = tag
+    if (System.getenv("GITHUB_WORKFLOW") == "Build, Discord & Modrinth Release") {
+        version = rootProject.mod_version
     } else if (System.getenv("PULL_REQUEST")) {
-        version = "${tag}${tag.contains("-") ? "." : "-"}.pr.${System.getenv("PULL_REQUEST")}.${System.getenv("GITHUB_RUN_NUMBER")}"
+        version = "${rootProject.mod_version}-pr.${System.getenv("PULL_REQUEST")}.${System.getenv("GITHUB_RUN_NUMBER")}"
     } else {
-        version = "${tag}${tag.contains("-") ? "." : "-"}.${System.getenv("GITHUB_RUN_NUMBER")}"
+        version = "${rootProject.mod_version}-${System.getenv("GITHUB_RUN_NUMBER")}"
     }
 } else {
-    version = "${tag}${tag.contains("-") ? "." : ""}"
+    version = rootProject.mod_version
 }
 
 architectury {
@@ -45,7 +42,7 @@ allprojects {
     apply plugin: "architectury-plugin"
     apply plugin: "maven-publish"
 
-    archivesBaseName = "${rootProject.minecraft_version}/${rootProject.mod_version}/${tag}/${rootProject.archives_base_name}-${rootProject.minecraft_version}-${project.name}-${rootProject.mod_version}"
+    archivesBaseName = "${rootProject.archives_base_name}-${rootProject.minecraft_version}-${project.name}"
     group = rootProject.maven_group
 
     repositories {
@@ -53,6 +50,8 @@ allprojects {
         gradlePluginPortal()
         maven { url "https://jitpack.io" }
         maven { url "https://cursemaven.com" }
+        maven { url "https://www.cursemaven.com" }
+        maven { url "https://api.modrinth.com/maven" }
         maven { url "https://maven.fabricmc.net/" }
         maven { url "https://maven.architectury.dev/" }
         maven { url "https://repo.maven.apache.org/maven2/" }
@@ -130,8 +129,8 @@ allprojects {
         def path = buildDir.absolutePath
         if (!path.contains("CobbleUtils\\build") && !path.contains("common")) {
             println("Copying jar to actual_versions -> ${rootProject.projectDir}\\actual_versions")
-            println("Jar file -> ${path}\\libs\\${archivesBaseName}-${tag}.jar")
-            def jarFile = file("${path}\\libs\\${archivesBaseName}-${tag}.jar")
+            println("Jar file -> ${path}\\libs\\${archivesBaseName}-${version}.jar")
+            def jarFile = file("${path}\\libs\\${archivesBaseName}-${version}.jar")
             if (jarFile.exists()) {
                 from(jarFile)
                 into("${rootProject.projectDir}\\actual_versions")
@@ -140,3 +139,28 @@ allprojects {
     }
     build.finalizedBy(cleanAndCopyJarToActualVersions)
 }
+
+task apiJar(type: Jar) {
+    dependsOn project(':common').tasks.named('classes')
+    archiveBaseName = "${rootProject.archives_base_name}-${rootProject.minecraft_version}"
+    archiveClassifier = 'api'
+    version = "${rootProject.version}"
+    from(project(':common').sourceSets.main.output) {
+        include 'com/kingpixel/cobbleutils/api/**'
+        include 'com/kingpixel/cobbleutils/Model/**'
+        include 'com/kingpixel/cobbleutils/util/**'
+        include 'com/kingpixel/cobbleutils/adapter/**'
+    }
+
+    doLast {
+        def targetDir = file("${rootProject.projectDir}/actual_versions")
+        if (targetDir.exists() && archiveFile.get().asFile.exists()) {
+            copy {
+                from archiveFile.get().asFile
+                into targetDir
+            }
+            println("Copied API Jar to actual_versions -> ${archiveFile.get().asFile.name}")
+        }
+    }
+}
+

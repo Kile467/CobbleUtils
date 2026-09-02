@@ -11,12 +11,11 @@ import ca.landonjw.gooeylibs2.api.page.GooeyPage;
 import ca.landonjw.gooeylibs2.api.page.LinkedPage;
 import ca.landonjw.gooeylibs2.api.template.types.ChestTemplate;
 import com.kingpixel.cobbleutils.CobbleUtils;
-import com.kingpixel.cobbleutils.Model.Animations.AllRewardsCircleAnimation;
-import com.kingpixel.cobbleutils.Model.Animations.AnimationUtils;
-import com.kingpixel.cobbleutils.Model.Animations.CSGOAnimation;
-import com.kingpixel.cobbleutils.Model.Animations.CircleAnimation;
+import com.kingpixel.cobbleutils.Model.Animations.core.AnimationQueue;
+import com.kingpixel.cobbleutils.Model.Animations.core.Animations;
 import com.kingpixel.cobbleutils.api.PermissionApi;
 import com.kingpixel.cobbleutils.command.suggests.CobbleUtilsSuggests;
+import com.kingpixel.cobbleutils.config.AdvancedRewardsConfig;
 import com.kingpixel.cobbleutils.database.DataBaseFactory;
 import com.kingpixel.cobbleutils.database.users.models.Storage;
 import com.kingpixel.cobbleutils.database.users.models.StorageRewards;
@@ -30,7 +29,6 @@ import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.LoreComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.math.Vec3d;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -47,6 +45,7 @@ public class AdvancedItemChance {
   private boolean showMenu;
   private String title;
   private boolean giveAll;
+  private boolean cumulativeLootTable;
   private final Map<String, Integer> amountRewardsPermission;
   private Sound newSound;
   private Particle particle;
@@ -58,13 +57,14 @@ public class AdvancedItemChance {
     this.showMenu = true;
     this.title = "";
     this.giveAll = false;
+    this.cumulativeLootTable = true;
     this.amountRewardsPermission = new HashMap<>();
     this.amountRewardsPermission.put("", 1);
     this.amountRewardsPermission.put("group.vip", 1);
     this.newSound = new Sound();
     this.particle = new Particle();
     this.animation = Animations.NONE;
-    this.lootTable = new HashMap<>();
+    this.lootTable = new LinkedHashMap<>();
     lootTable.put("", ItemChance.defaultItemChances());
     List<ItemChance> itemChances = new ArrayList<>();
     itemChances.add(new ItemChance());
@@ -267,29 +267,10 @@ public class AdvancedItemChance {
 
 
   public static void initAnimation(Animations animation, ServerPlayerEntity player, List<ItemStack> showAllRewards, List<ItemStack> showObtainedRewards) {
-    Vec3d centerPosition = AnimationUtils.getPosition(player, null);
-    switch (animation) {
-      case CSGO:
-        CSGOAnimation.start(player, showAllRewards, showObtainedRewards);
-        break;
-      case CIRCLE:
-        CircleAnimation.start(player, showObtainedRewards, centerPosition);
-        break;
-      case ALLCIRCLE:
-        AllRewardsCircleAnimation.start(player, showAllRewards, centerPosition);
-        break;
-      default:
-        break;
-    }
+    if (animation == null || animation == Animations.NONE) return;
+    AnimationQueue.enqueue(player, animation, showAllRewards, showObtainedRewards);
   }
 
-  public enum Animations {
-    NONE, // No animation
-    RANDOM,
-    CSGO, // Show the items in a CSGO style
-    CIRCLE, // Show the items in a circle style
-    ALLCIRCLE // Show all the items in a circle style
-  }
 
   // Menus methods
 
@@ -343,7 +324,7 @@ public class AdvancedItemChance {
   private void applyTemplate(ServerPlayerEntity player, ChestTemplate template) {
     AdvancedItemChance finish;
     if (getId() != null && !getId().isEmpty()) {
-      finish = CobbleUtils.advancedRewardsConfig.getTEMPLATE_REWARDS().get(getId());
+      finish = AdvancedRewardsConfig.getAdvancedReward(getId());
       if (finish == null) {
         PlayerUtils.sendMessage(player,
           "%prefix% &cThe Advanced Reward Template with id &e" + this.getId() + " &cdoes not exist, please notify the" +
@@ -482,6 +463,9 @@ public class AdvancedItemChance {
     for (Map.Entry<String, List<ItemChance>> entry : lootTable.entrySet()) {
       if (entry.getValue() != null && PermissionApi.hasPermission(player, entry.getKey(), 2)) {
         result.addAll(entry.getValue());
+        if (!cumulativeLootTable) {
+          break;
+        }
       }
     }
 

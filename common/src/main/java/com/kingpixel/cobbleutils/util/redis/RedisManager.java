@@ -128,13 +128,16 @@ public class RedisManager {
    *
    * @param handler The handler to register. Must provide a unique identifier.
    */
-  public void registerHandler(RedisHandler handler) {
+  public synchronized void registerHandler(RedisHandler handler) {
     String fullChannel = redisConfig.getChannel() + ":" + handler.getIdentifier();
     handlers.put(fullChannel, handler);
 
     JedisPubSub sub = this.subscriber;
     if (sub != null && sub.isSubscribed()) {
-      CompletableFuture.runAsync(() -> sub.subscribe(fullChannel));
+      try {
+        sub.unsubscribe();
+      } catch (Exception ignored) {
+      }
     } else {
       startSubscriber();
     }
@@ -164,8 +167,12 @@ public class RedisManager {
     };
 
     subscriberThread = new Thread(() -> {
-      while (!Thread.currentThread().isInterrupted() && !jedisPool.isClosed()) {
-        try (Jedis jedis = jedisPool.getResource()) {
+      while (!Thread.currentThread().isInterrupted() && (jedisPool == null || !jedisPool.isClosed())) {
+        String password = redisConfig.getPassword();
+        try (Jedis jedis = new Jedis(redisConfig.getHost(), redisConfig.getPort(), TIMEOUT)) {
+          if (password != null && !password.isEmpty()) {
+            jedis.auth(password);
+          }
           String[] channels = handlers.keySet().toArray(new String[0]);
           if (channels.length > 0) {
             jedis.subscribe(subscriber, channels);
@@ -237,6 +244,28 @@ public class RedisManager {
   public void saveState(String key, JsonObject json) {
     if (!connected.get()) return;
     execute(jedis -> jedis.set("state:" + key, json.toString()));
+  }
+
+  /**
+   * Persists a JSON state in Redis under the key {@code state:<key>} with an expiration time.
+   *
+   * @param key     The state identifier.
+   * @param json    The JSON payload to store.
+   * @param seconds Expiration time in seconds.
+   */
+  public void saveState(String key, JsonObject json, int seconds) {
+    if (!connected.get()) return;
+    execute(jedis -> jedis.setex("state:" + key, seconds, json.toString()));
+  }
+
+  /**
+   * Deletes a previously saved JSON state from Redis.
+   *
+   * @param key The state identifier.
+   */
+  public void deleteState(String key) {
+    if (!connected.get()) return;
+    execute(jedis -> jedis.del("state:" + key));
   }
 
   /**

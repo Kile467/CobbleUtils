@@ -22,9 +22,6 @@ bin
 .project
 /.architectury-transformer/
 /net.kyori
-.github
-.github/
-/.github/
 
 # idea
 out
@@ -36,6 +33,7 @@ out
 forge*changelog.txt
 /showdown/
 /logs/
+**/logs/
 .vscode/launch.json
 .vscode
 

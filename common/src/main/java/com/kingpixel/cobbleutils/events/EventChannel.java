@@ -1,5 +1,7 @@
 package com.kingpixel.cobbleutils.events;
 
+import com.kingpixel.cobbleutils.CobbleUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +19,11 @@ public class EventChannel<T> {
   public void emit(T data) {
     if (listeners.isEmpty()) return;
     for (EventListener<T> l : listeners) {
-      l.onEvent(data);
+      try {
+        l.onEvent(data);
+      } catch (Throwable e) {
+        CobbleUtils.LOGGER_RAW.error("Error executing event listener in EventChannel", e);
+      }
     }
   }
 

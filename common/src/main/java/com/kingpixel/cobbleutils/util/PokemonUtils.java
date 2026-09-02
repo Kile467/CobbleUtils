@@ -59,6 +59,7 @@ public class PokemonUtils {
    *
    * @param lore    The lore to replace
    * @param pokemon The pokemon to get the data
+   *
    * @return The lore with the replaced placeholders
    */
   public static List<String> replace(List<String> lore, Pokemon pokemon) {
@@ -89,6 +90,7 @@ public class PokemonUtils {
    * Get the showdown id of the pokemon
    *
    * @param pokemon The pokemon to get the id
+   *
    * @return The showdown id of the pokemon
    */
   public static String getIdentifierPokemon(Pokemon pokemon) {
@@ -99,6 +101,7 @@ public class PokemonUtils {
    * Replace the placeholders with the pokemon data
    *
    * @param pokemon The pokemon to get the data
+   *
    * @return The lore with the replaced placeholders
    */
   public static List<String> replaceLore(Pokemon pokemon) {
@@ -109,6 +112,7 @@ public class PokemonUtils {
    * Replace the placeholders with the pokemon data
    *
    * @param pokemon The pokemon to get the data
+   *
    * @return The string with the replaced placeholders
    */
   public static String replace(Pokemon pokemon) {
@@ -148,7 +152,7 @@ public class PokemonUtils {
     Map.entry("%nature%", p -> safe(p, poke -> getNatureTranslate(poke.getNature()))),
     Map.entry("%pokemon%", p -> safe(p, poke -> isEgg(poke) ? poke.getPersistentData().getString("pokemon") : getTranslatedName(poke))),
     Map.entry("%shiny%", p -> safe(p, poke -> poke.getShiny() ? CobbleUtils.language.getSymbolshiny() : EMPTY)),
-    Map.entry("%ability%", p -> safe(p, poke -> isEgg(poke) ? "<lang:cobblemon.ability." + poke.getPersistentData().getString("ability") + ">" : getAbilityTranslate(poke.getAbility()))),
+    Map.entry("%ability%", p -> safe(p, poke -> isEgg(poke) ? "<lang:'cobblemon.ability." + poke.getPersistentData().getString("ability") + "'>" : getAbilityTranslate(poke.getAbility()))),
     Map.entry("%tradeable%", p -> safe(p, poke -> poke.getTradeable() ? CobbleUtils.language.getYes() : CobbleUtils.language.getNo())),
     // IVs
     Map.entry("%ivshp%", p -> safe(p, poke -> String.valueOf(getIv(poke, Stats.HP)))),
@@ -216,8 +220,35 @@ public class PokemonUtils {
     return pokemon.getIvs().getOrDefault(stat);
   }
 
+  private static final Map<String, Function<Pokemon, String>> EXTERNAL_PLACEHOLDERS = new java.util.concurrent.ConcurrentHashMap<>();
+
+  /**
+   * Register a custom placeholder function from external mods.
+   *
+   * @param placeholder The placeholder name (e.g. "%my_placeholder%" or "my_placeholder")
+   * @param function    Function that receives a Pokemon and returns a String value
+   */
+  public static void registerPlaceholder(String placeholder, Function<Pokemon, String> function) {
+    if (placeholder == null || function == null) return;
+    String key = placeholder.startsWith("%") ? placeholder : "%" + placeholder;
+    if (!key.endsWith("%")) key = key + "%";
+    EXTERNAL_PLACEHOLDERS.put(key.toLowerCase(), function);
+  }
+
+  /**
+   * Unregister a custom placeholder.
+   *
+   * @param placeholder The placeholder name
+   */
+  public static void unregisterPlaceholder(String placeholder) {
+    if (placeholder == null) return;
+    String key = placeholder.startsWith("%") ? placeholder : "%" + placeholder;
+    if (!key.endsWith("%")) key = key + "%";
+    EXTERNAL_PLACEHOLDERS.remove(key.toLowerCase());
+  }
+
   public static Map<String, String> buildPlaceholders(Pokemon pokemon, String indexStr) {
-    Map<String, String> result = HashMap.newHashMap(PLACEHOLDER_FUNCTIONS.size());
+    Map<String, String> result = HashMap.newHashMap(PLACEHOLDER_FUNCTIONS.size() + EXTERNAL_PLACEHOLDERS.size());
     String index = (indexStr == null) ? EMPTY : indexStr;
 
     for (Map.Entry<String, Function<Pokemon, String>> entry : PLACEHOLDER_FUNCTIONS.entrySet()) {
@@ -228,6 +259,16 @@ public class PokemonUtils {
       }
       result.put(key, value);
     }
+
+    for (Map.Entry<String, Function<Pokemon, String>> entry : EXTERNAL_PLACEHOLDERS.entrySet()) {
+      String key = entry.getKey();
+      String value = safe(pokemon, entry.getValue());
+      if (!index.isEmpty()) {
+        key = key.substring(0, key.length() - 1) + index + "%";
+      }
+      result.put(key, value);
+    }
+
     return result;
   }
 
@@ -241,6 +282,7 @@ public class PokemonUtils {
    *
    * @param message The string to replace
    * @param pokemon The pokemon to get the data
+   *
    * @return The string with the replaced placeholders
    */
   public static String replace(String message, Pokemon pokemon) {
@@ -261,6 +303,7 @@ public class PokemonUtils {
    *
    * @param message  The string to replace
    * @param pokemons The pokemon to get the data
+   *
    * @return The string with the replaced placeholders
    */
   public static String replace(String message, List<Pokemon> pokemons) {
@@ -363,18 +406,18 @@ public class PokemonUtils {
    *
    */
   public static String getTranslatedName(Pokemon pokemon) {
-    return "<lang:cobblemon.species." + pokemon.getSpecies().showdownId() + ".name>";
+    return "<lang:'cobblemon.species." + pokemon.getSpecies().showdownId() + ".name'>";
   }
 
   /**
    * Check if the pokemon is breedable
    *
    * @param pokemon The pokemon to check
+   *
    * @return If the pokemon is breedable
    */
   public static boolean isBreedable(Pokemon pokemon) {
-    if (pokemon.getPersistentData() != null && pokemon.getPersistentData().contains("breedable") &&
-      !pokemon.getPersistentData().getBoolean("breedable")) {
+    if (pokemon.getPersistentData().contains("breedable") && !pokemon.getPersistentData().getBoolean("breedable")) {
       return pokemon.getPersistentData().getBoolean("breedable");
     } else {
       return true;
@@ -385,6 +428,7 @@ public class PokemonUtils {
    * Get the owner name of the pokemon
    *
    * @param pokemon The pokemon to get the owner name
+   *
    * @return The owner name of the pokemon
    */
   public static String getOwnerName(Pokemon pokemon) {
@@ -398,6 +442,7 @@ public class PokemonUtils {
    * Get the size of the pokemon
    *
    * @param pokemon The pokemon to get the size
+   *
    * @return The size of the pokemon
    */
   public static String getSize(Pokemon pokemon) {
@@ -408,6 +453,7 @@ public class PokemonUtils {
    * Get the total of the IVs
    *
    * @param iVs The IVs to get the total
+   *
    * @return The total of the IVs
    */
   public static Integer getIvsTotal(IVs iVs) {
@@ -420,6 +466,7 @@ public class PokemonUtils {
    * Get the average of the IVs
    *
    * @param iVs The IVs to get the average
+   *
    * @return The average of the IVs
    */
   public static Integer getIvsAverage(IVs iVs) {
@@ -439,6 +486,7 @@ public class PokemonUtils {
    * Get the total number of max IVs (31)
    *
    * @param iVs The IVs to get the number max Ivs
+   *
    * @return The number of the maxed IVs
    */
   public static Integer getTotalPerfectIvs(IVs iVs) {
@@ -453,6 +501,7 @@ public class PokemonUtils {
    * Get the total of the EVs
    *
    * @param eVs The EVs to get the total
+   *
    * @return The total of the EVs
    */
   public static Integer getEvsTotal(EVs eVs) {
@@ -466,6 +515,7 @@ public class PokemonUtils {
    * Get the average of the EVs
    *
    * @param eVs The EVs to get the average
+   *
    * @return The average of the EVs
    */
   public static Integer getEvsAverage(EVs eVs) {
@@ -484,29 +534,31 @@ public class PokemonUtils {
    * Get the ability translation
    *
    * @param ability The ability to translate
+   *
    * @return The ability translation
    */
   public static String getAbilityTranslate(Ability ability) {
     if (ability == null) return CobbleUtils.language.getNone();
-    return "<lang:cobblemon.ability." + ability.getName() + ">";
+    return "<lang:'cobblemon.ability." + ability.getName() + "'>";
   }
 
   /**
    * Get the nature translation
    *
    * @param nature The nature to translate
+   *
    * @return The nature translation
    */
   public static String getNatureTranslate(Nature nature) {
     if (nature == null) return CobbleUtils.language.getNone();
-    return "<lang:cobblemon.nature." + nature.getName().getPath() + ">";
+    return "<lang:'cobblemon.nature." + nature.getName().getPath() + "'>";
   }
 
   public static String getMoveColor(ElementalType type, String lang) {
     if (type == null) return CobbleUtils.language.getNone();
     String color = CobbleUtils.language.getMovecolor().getOrDefault(type.getShowdownId(), "");
-    if (color.contains("gradient")) return color + "<lang:" + lang + ">" + "</gradient>";
-    return color + "<lang:" + lang + ">";
+    if (color.contains("gradient")) return color + "<lang:'" + lang + "'>" + "</gradient>";
+    return color + "<lang:'" + lang + "'>";
   }
 
   public static String getType(ElementalType type) {
@@ -518,6 +570,7 @@ public class PokemonUtils {
    * Get the type of the pokemon
    *
    * @param pokemon The pokemon to get the type
+   *
    * @return The type of the pokemon
    */
   public static String getType(Pokemon pokemon) {
@@ -542,6 +595,7 @@ public class PokemonUtils {
    * Get the move translation
    *
    * @param move The move to translate
+   *
    * @return The move translation
    */
 
@@ -565,17 +619,18 @@ public class PokemonUtils {
    * Get the stat translation
    *
    * @param stat The stat to translate
+   *
    * @return The stat translation
    */
   public static String getStatTranslate(Stat stat) {
     if (stat == null) return "";
     return switch (stat.getIdentifier().toTranslationKey()) {
-      case "cobblemon.hp" -> "<lang:cobblemon.ui.stats.hp>";
-      case "cobblemon.attack" -> "<lang:cobblemon.ui.stats.atk>";
-      case "cobblemon.defence" -> "<lang:cobblemon.ui.stats.def>";
-      case "cobblemon.special_attack" -> "<lang:cobblemon.ui.stats.sp_atk>";
-      case "cobblemon.special_defence" -> "<lang:cobblemon.ui.stats.sp_def>";
-      case "cobblemon.speed" -> "<lang:cobblemon.ui.stats.speed>";
+      case "cobblemon.hp" -> "<lang:'cobblemon.ui.stats.hp'>";
+      case "cobblemon.attack" -> "<lang:'cobblemon.ui.stats.atk'>";
+      case "cobblemon.defence" -> "<lang:'cobblemon.ui.stats.def'>";
+      case "cobblemon.special_attack" -> "<lang:'cobblemon.ui.stats.sp_atk'>";
+      case "cobblemon.special_defence" -> "<lang:'cobblemon.ui.stats.sp_def'>";
+      case "cobblemon.speed" -> "<lang:'cobblemon.ui.stats.speed'>";
       default -> "";
     };
   }
@@ -584,6 +639,7 @@ public class PokemonUtils {
    * Get the pokeball translation
    *
    * @param caughtBall The pokeball to translate
+   *
    * @return The pokeball translation
    */
   public static String getPokeBallTranslate(PokeBall caughtBall) {
@@ -603,6 +659,7 @@ public class PokemonUtils {
    * Get the gender translation
    *
    * @param gender The gender to translate
+   *
    * @return The gender translation
    */
   public static String getGenderTranslate(Gender gender) {
@@ -614,6 +671,7 @@ public class PokemonUtils {
    * Get the rarity of the pokemon
    *
    * @param pokemon The pokemon to get the rarity
+   *
    * @return The rarity of the pokemon
    */
   public static double getRarity(Pokemon pokemon) {
@@ -626,6 +684,7 @@ public class PokemonUtils {
    * Get the rarity of the pokemon
    *
    * @param pokemon The pokemon to get the rarity
+   *
    * @return The rarity of the pokemon
    */
   public static String getRarityS(Pokemon pokemon) {
@@ -666,6 +725,7 @@ public class PokemonUtils {
    * Get the size of the pokemon
    *
    * @param pokemon The pokemon to get the size
+   *
    * @return The size of the pokemon
    */
   public static String getSizeName(Pokemon pokemon) {
@@ -678,6 +738,7 @@ public class PokemonUtils {
    * Check if the pokemon has the hidden ability
    *
    * @param pokemon The pokemon to check
+   *
    * @return If the pokemon has the hidden ability
    */
   public static boolean isAH(Pokemon pokemon) {
